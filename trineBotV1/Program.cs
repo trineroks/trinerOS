@@ -281,30 +281,40 @@ namespace trineBotV1
 
         static void addMaster(string steamID, SteamID partner)
         {
-            if (botInstance.master.Exists(ID => ID == steamID))
+            if (botInstance.hasMasterPrivileges(partner) == 1)
             {
-                string response = "Error adding " + steamID + "; already exists in master list.";
-                printLine(partner, response);
+                if (botInstance.master.Exists(ID => ID == steamID))
+                {
+                    string response = "Error adding " + steamID + "; already exists in master list.";
+                    printLine(partner, response);
+                }
+                else
+                {
+                    botInstance.master.Add(steamID);
+                    //botInstance.pushMaster(steamID);
+                    string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
+                    File.WriteAllText("configs.json", json);
+                }
             }
             else
-            {
-                botInstance.master.Add(steamID);
-                //botInstance.pushMaster(steamID);
-                string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
-                File.WriteAllText("configs.json", json);
-            }
+                printLine(partner, "You do not have overlord privileges. Please contact trineroks our lord and savior.");
         }
 
         static void removeMaster(string steamID, SteamID partner)
         {
-            if (botInstance.master.Remove(steamID))
+            if (botInstance.hasMasterPrivileges(partner) == 1)
             {
-                printLine(partner, steamID + " removed from masters list.");
-                string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
-                File.WriteAllText("configs.json", json);
+                if (botInstance.master.Remove(steamID))
+                {
+                    printLine(partner, steamID + " removed from masters list.");
+                    string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
+                    File.WriteAllText("configs.json", json);
+                }
+                else
+                    printLine(partner, "Unable to remove " + steamID + "; maybe it doesn't exist on the list or is typed incorrectly?");
             }
             else
-                printLine(partner, "Unable to remove " + steamID + "; maybe it doesn't exist on the list or is typed incorrectly?");
+                printLine(partner, "You do not have overlord privileges. Please contact trineroks our lord and savior.");
         }
 
         static void printLine(SteamID recipient, string line)
