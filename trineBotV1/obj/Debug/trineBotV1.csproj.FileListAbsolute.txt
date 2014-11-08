@@ -1,0 +1,13 @@
+C:\src\trineBotV1\trineBotV1\bin\Debug\trineBotV1.exe.config
+C:\src\trineBotV1\trineBotV1\bin\Debug\trineBotV1.exe
+C:\src\trineBotV1\trineBotV1\bin\Debug\trineBotV1.pdb
+C:\src\trineBotV1\trineBotV1\bin\Debug\Newtonsoft.Json.dll
+C:\src\trineBotV1\trineBotV1\bin\Debug\protobuf-net.dll
+C:\src\trineBotV1\trineBotV1\bin\Debug\SteamKit2.dll
+C:\src\trineBotV1\trineBotV1\bin\Debug\Newtonsoft.Json.xml
+C:\src\trineBotV1\trineBotV1\bin\Debug\protobuf-net.pdb
+C:\src\trineBotV1\trineBotV1\bin\Debug\protobuf-net.xml
+C:\src\trineBotV1\trineBotV1\bin\Debug\SteamKit2.xml
+C:\src\trineBotV1\trineBotV1\obj\Debug\trineBotV1.csprojResolveAssemblyReference.cache
+C:\src\trineBotV1\trineBotV1\obj\Debug\trineBotV1.exe
+C:\src\trineBotV1\trineBotV1\obj\Debug\trineBotV1.pdb
