@@ -14,6 +14,8 @@ namespace trineBotV1
 {
     class Program
     {
+        static string version = "0.1.1";
+
         static string username, password, authcode;
 
         static SteamClient steamClient;
@@ -141,8 +143,7 @@ namespace trineBotV1
             botInstance.setUsername(username);
             botInstance.setPassword(password);
             */
-            string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
-            File.WriteAllText("configs.json", json);
+            saveToFile();
         }
 
         static void updateMachineAuthCallback(SteamUser.UpdateMachineAuthCallback callback)
@@ -214,8 +215,8 @@ namespace trineBotV1
             {
                 if (callback.Message.Length > 1 && callback.Message[0] == '/')
                 {
-                    Console.WriteLine("Command entered");
-                    parse_input(callback.Message.Trim('/'), callback);
+                    Console.WriteLine("Command {0} entered by {1}.", callback.Message, steamFriends.GetFriendPersonaName(callback.Sender));
+                    parse_input(callback.Message.Remove(0,1), callback);
                 }
             }
         }
@@ -224,38 +225,71 @@ namespace trineBotV1
             SteamID partner = callback.Sender;
             string[] command = input.Split(' ');
             int command_len = command.Length;
+            if (command[0] == "broadcast" && command_len > 1)
+            {
+                if (command[1][0] == '@')
+                {
+                    parseBroadcastMessage(input.Remove(0, 11), partner); //remove 11 characters, which is "broadcast @"
+                    return;
+                }
+            }
             switch (command_len)
             {
                 case 1:
                     switch (command[0])
                     {
                         case "help":
-                            helper(partner);
+                            printError(partner, "help", -1);
                             break;
                         case "amimaster":
                             amIMaster(partner);
                             break;
-                        case "creator":
-                            credits(partner);
+                        case "about":
+                            printAbout(partner);
                             break;
-
+                        case "yorick":
+                            printLine(partner, "Alas, poor Yorick! I knew him, Horatio; a fellow of infinite jest, of most excellent fancy.");
+                            break;
+                        case "whoami":
+                            whoAmI(partner);
+                            break;
+                        case "nukemaster":
+                            OverNukeMaster(partner);
+                            break;
+                        default:
+                            printError(partner, "", -1);
+                            break;
                     }
                     break;
                 case 2:
                     switch (command[0])
                     {
                         case "addmaster":
-                            addMaster(command[1], partner);
+                            OverAddMaster(command[1], partner);
                             break;
                         case "removemaster":
-                            removeMaster(command[1], partner);
+                            OverRemoveMaster(command[1], partner);
+                            break;
+                        case "help":
+                            help(command[1], partner);
+                            break;
+                        default:
+                            printError(partner, "", -1);
                             break;
                     }
                     break;
-
+                default:
+                    printError(partner, "", -1);
+                    break;
             }
             return;
         }
+
+        static void printAbout(SteamID partner)
+        {
+            printLine(partner, "\ntrinerOS is currently at version " + version + ".\ntrinerOS was created by trineroks in under 24 hours at HackSC.");
+        }
+
         static void amIMaster(SteamID partner)
         {
             switch(botInstance.hasMasterPrivileges(partner))
@@ -274,12 +308,29 @@ namespace trineBotV1
                     break;
             }
         }
-        static void helper(SteamID partner)
+        static void help(string arg, SteamID partner)
         {
-            printLine(partner, "Need help?");
+            int checkYourPrivilege = botInstance.hasMasterPrivileges(partner);
+            switch(arg)
+            {
+                case "command":
+                    printLine(partner, "REGULAR: /help <arg>, /amimaster, /about, /yorick, /whoami");
+                    if (checkYourPrivilege >= 0)
+                    {
+                        printLine(partner, "MASTER: /broadcast @message");
+                    }
+                    if (checkYourPrivilege == 1)
+                    {
+                        printLine(partner, "OVERLORD: /addmaster <arg>, /removemaster <arg>, /nukemaster");
+                    }
+                    break;
+                default:
+                    printError(partner, "help", -1);
+                    break;
+            }
         }
 
-        static void addMaster(string steamID, SteamID partner)
+        static void OverAddMaster(string steamID, SteamID partner)
         {
             if (botInstance.hasMasterPrivileges(partner) == 1)
             {
@@ -292,29 +343,45 @@ namespace trineBotV1
                 {
                     botInstance.master.Add(steamID);
                     //botInstance.pushMaster(steamID);
-                    string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
-                    File.WriteAllText("configs.json", json);
+                    saveToFile();
                 }
             }
             else
-                printLine(partner, "You do not have overlord privileges. Please contact trineroks our lord and savior.");
+                printError(partner, "", 1);
         }
 
-        static void removeMaster(string steamID, SteamID partner)
+        static void OverRemoveMaster(string steamID, SteamID partner)
         {
             if (botInstance.hasMasterPrivileges(partner) == 1)
             {
                 if (botInstance.master.Remove(steamID))
                 {
                     printLine(partner, steamID + " removed from masters list.");
-                    string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
-                    File.WriteAllText("configs.json", json);
+                    saveToFile();
                 }
                 else
                     printLine(partner, "Unable to remove " + steamID + "; maybe it doesn't exist on the list or is typed incorrectly?");
             }
             else
-                printLine(partner, "You do not have overlord privileges. Please contact trineroks our lord and savior.");
+                printError(partner, "", 1);
+        }
+
+        static void OverNukeMaster(SteamID partner)
+        {
+            if (botInstance.hasMasterPrivileges(partner) == 1)
+            {
+                printLine(partner, "Master list nuked.");
+                botInstance.master.Clear();
+                saveToFile();
+            }
+            else
+                printError(partner, "", 1);
+        }
+
+        static void whoAmI(SteamID partner)
+        {
+            string partnerName = steamFriends.GetFriendPersonaName(partner);
+            printLine(partner, "You are " + partnerName + " with the SteamID: " + partner.ToString());
         }
 
         static void printLine(SteamID recipient, string line)
@@ -322,9 +389,52 @@ namespace trineBotV1
             steamFriends.SendChatMessage(recipient, EChatEntryType.ChatMsg, line);
         }
 
-        static void credits(SteamID partner)
+        static void printError(SteamID recipient, string command, int permIssue)
         {
-            printLine(partner, "trinerOS was created by trineroks in under 24 hours at HackSC.");
+            if (permIssue >= 0)
+            {
+                if (permIssue == 1)
+                    printLine(recipient, "You do not have overlord privileges. Please contact trineroks our lord and savior.");
+                else
+                    printLine(recipient, "You do not have master privileges.");
+                return;
+            }
+            else
+                switch(command)
+                {
+                    case "help":
+                        printLine(recipient, "Use \"/help command\" for a list of commands, or \"/help <command>\" for help on a particular command.");
+                        break;
+                    default:
+                        printLine(recipient, "Invalid command entered. Be wary of multiple spaces and/or typos.");
+                        break;
+                }
+        }
+
+        static bool parseBroadcastMessage(string message, SteamID sender) //this is a master level command
+        {
+            if (botInstance.hasMasterPrivileges(sender) >= 0)
+            {
+                int friendCount = steamFriends.GetFriendCount();
+                string senderName = steamFriends.GetFriendPersonaName(sender);
+                SteamID recipient;
+                if (friendCount == 0)
+                    return false;
+                for (int i = 0; i < friendCount; ++i)
+                {
+                    recipient = steamFriends.GetFriendByIndex(i);
+                    printLine(recipient, senderName + " broadcasts - " + message);
+                }
+                return true;
+            }
+            printError(sender, "", 0);
+            return false;
+        }
+
+        static void saveToFile()
+        {
+            string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
+            File.WriteAllText("configs.json", json);
         }
     }
 }
