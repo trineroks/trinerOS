@@ -83,6 +83,11 @@ namespace trineBotV1
             new Callback<SteamFriends.FriendsListCallback>(onFriendsList, manager);
             new Callback<SteamFriends.FriendAddedCallback>(onFriendAdded, manager);
 
+            new Callback<SteamFriends.ChatInviteCallback>(onChatInvite, manager);
+            new Callback<SteamFriends.ChatEnterCallback>(onChatEnter, manager);
+
+            new Callback<SteamFriends.ClanStateCallback>(onClanState, manager);
+
             isRunning = true;
 
             Console.WriteLine("Connecting to Steam...");
@@ -183,6 +188,11 @@ namespace trineBotV1
             Console.WriteLine("Logged off of Steam: {0}", callback.Result);
         }
 
+        static void onClanState(SteamFriends.ClanStateCallback callback)
+        {
+            Console.WriteLine("onClanState was entered.");
+        }
+
         static void onAccountInfo(SteamUser.AccountInfoCallback callback)
         {
             steamFriends.SetPersonaState(EPersonaState.Online); //set our status to Online when logged in
@@ -192,17 +202,27 @@ namespace trineBotV1
         {
             int friendCount = steamFriends.GetFriendCount();
 
-            Console.WriteLine("{0} friends on friend list", friendCount);
+            Console.WriteLine("{0} friends on friend list.", friendCount);
+            Console.WriteLine("{0} groups joined.", steamFriends.GetClanCount());
 
             foreach (var friend in callback.FriendList)
             {
-                if (friend.Relationship == EFriendRelationship.RequestRecipient)
+                if (friend.SteamID.AccountType == EAccountType.Clan)
+                {
+                    if (friend.Relationship == EFriendRelationship.RequestRecipient)
+                    {
+                        acceptClanInvite(friend.SteamID);
+                    }
+                }
+                else if (friend.Relationship == EFriendRelationship.RequestRecipient)
+                {
                     steamFriends.AddFriend(friend.SteamID);
+                }
             }
-            updateUserPrefs(callback);
+            updateUserPrefs();
         }
 
-        static void updateUserPrefs(SteamFriends.FriendsListCallback callback) //automatic users cleanup
+        static void updateUserPrefs() //automatic users cleanup
         {
             int steamFriendCount = steamFriends.GetFriendCount();
             for (int k = 0; k < steamFriendCount; ++k )
@@ -242,6 +262,18 @@ namespace trineBotV1
             steamFriends.SendChatMessage(callback.SteamID, EChatEntryType.ChatMsg, response);
         }
 
+        static void onChatInvite(SteamFriends.ChatInviteCallback callback)
+        {
+            Console.WriteLine("Invited to chat with ID {0}, name {1}, and type {2}", callback.ChatRoomID, callback.ChatRoomName, callback.ChatRoomType);
+            //steamFriends.JoinChat
+        }
+
+        static void onChatEnter(SteamFriends.ChatEnterCallback callback)
+        {
+            Console.WriteLine("onChatEnter activated");
+            steamFriends.JoinChat(callback.ChatID);
+        }
+
         static void onMessageReceive(SteamFriends.FriendMsgCallback callback)
         {
             if (callback.EntryType == EChatEntryType.ChatMsg)
@@ -259,19 +291,19 @@ namespace trineBotV1
             SteamID partner = callback.Sender;
             string[] command = input.Split(' ');
             int command_len = command.Length;
-            if (command[0] == "broadcast" && command_len > 1)
+            if (command[0] == "bc" && command_len > 1)
             {
                 if (command[1][0] == '@')
                 {
-                    parseBroadcastMessage(input.Remove(0, 11), partner); //remove 11 characters, which is "broadcast @"
+                    parseBroadcastMessage(input.Remove(0, 4), partner); //remove 11 characters, which is "broadcast @"
                     return;
                 }
             }
-            else if (command[0] == "adminbroadcast" && command_len > 1)
+            else if (command[0] == "bc2" && command_len > 1)
             {
                 if (command[1][0] == '@')
                 {
-                    overlordBroadcastMessage(input.Remove(0, 16), partner); //special broadcast for overlords only
+                    overlordBroadcastMessage(input.Remove(0, 5), partner); //special broadcast for overlords only
                     return;
                 }
             }
@@ -298,7 +330,7 @@ namespace trineBotV1
                         case "nukemaster":
                             OverNukeMaster(partner);
                             break;
-                        case "togglebroadcast":
+                        case "togglebc":
                             toggleBroadcast(partner);
                             break;
                         default:
@@ -379,10 +411,10 @@ namespace trineBotV1
             switch(arg)
             {
                 case "commands":
-                    printLine(partner, "REGULAR: /help <arg>, /amimaster, /about, /yorick, /whoami, /togglebroadcast");
+                    printLine(partner, "REGULAR: /help <arg>, /amimaster, /about, /yorick, /whoami, /togglebc");
                     if (checkYourPrivilege >= 0)
                     {
-                        printLine(partner, "MASTER: /broadcast @message");
+                        printLine(partner, "MASTER: /bc @message");
                     }
                     if (checkYourPrivilege == 1)
                     {
@@ -404,8 +436,8 @@ namespace trineBotV1
                 case "nukemaster":
                     printLine(partner, "nukemaster (1) - Clear the entire master list from this bot. \nUsage: /nukemaster");
                     break;
-                case "togglebroadcast":
-                    printLine(partner, "togglebroadcast (1) - Opt in/opt out of other users' broadcasts. \nUsage: /togglebroadcast");
+                case "togglebc":
+                    printLine(partner, "togglebc (1) - Opt in/opt out of other users' broadcasts. \nUsage: /togglebroadcast");
                     break;
                 case "addmaster":
                     printLine(partner, "addmaster (1) - Add a new master to this bot. \nUsage: /addmaster <SteamID>");
@@ -413,8 +445,11 @@ namespace trineBotV1
                 case "removemaster":
                     printLine(partner, "removemaster (1) - Remove a master from this bot. \nUsage: /removemaster <SteamID>");
                     break;
-                case "broadcast":
-                    printLine(partner, "broadcast (1) - Broadcast a message to all users subscribed to this bot. \nUsage: /broadcast @<Message>");
+                case "bc":
+                    printLine(partner, "bc (1) - Broadcast a message to all users subscribed to this bot. \nUsage: /broadcast @<Message>");
+                    break;
+                case "bc2":
+                    printLine(partner, "bc (2) - Broadcast a message to all users subscribed to this bot. This broadcast cannot be blocked and will be used sparingly. \nUsage: /broadcast2 @<Message>");
                     break;
                 default:
                     printError(partner, "help", -1);
@@ -558,6 +593,14 @@ namespace trineBotV1
         {
             string json = JsonConvert.SerializeObject(users, Formatting.None);
             File.WriteAllText("userPrefs.json", json);
+        }
+
+        static void acceptClanInvite(SteamID group)
+        {
+            var acceptInvite = new ClientMsg<CMsgClanInviteAction>((int)EMsg.ClientAcknowledgeClanInvite);
+            acceptInvite.Body.clanID = group.ConvertToUInt64();
+            acceptInvite.Body.acceptInvite = true;
+            steamClient.Send(acceptInvite);
         }
     }
 }
