@@ -85,7 +85,6 @@ namespace trineBotV1
         public int hasMasterPrivileges(SteamID steamID)
         {
             string stringID = steamID.ToString();
-            //string stringID = steamID.ConvertToString;
             if (stringID == overlord) //because all hail the overlord
                 return 1;
             else

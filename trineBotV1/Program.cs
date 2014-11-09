@@ -24,17 +24,19 @@ namespace trineBotV1
         static SteamUser steamUser;
         static SteamFriends steamFriends;
 
+        static List<userPrefs> users;
 
         static bool isRunning = false;
 
         //static botInfo botInfoInstance = new botInfo();
         static botData botInstance;
+
         static void Main(string[] args)
         {
             Console.Title = "Bot";
             Console.WriteLine("CTRL+C to exit.");
 
-            if (!File.Exists("configs.json"))
+            if (!File.Exists("configs.json") || !File.Exists("userPrefs.json"))
             {
                 Console.Write("Username: ");
                 username = Console.ReadLine();
@@ -42,12 +44,15 @@ namespace trineBotV1
                 Console.Write("Password: ");
                 password = Console.ReadLine();
                 botInstance = new botData() { UserName = username, Password = password, overlord = "STEAM_0:1:52699854" };
+                users = new List<userPrefs>();
             }
             else
             {
                 // botData botInstance;// = new botData();
                 string json = File.ReadAllText("configs.json");
                 botInstance = JsonConvert.DeserializeObject<botData>(json);
+                json = File.ReadAllText("userPrefs.json");
+                users = JsonConvert.DeserializeObject<List<userPrefs>>(json);
                 username = botInstance.UserName;
             }
 
@@ -137,12 +142,6 @@ namespace trineBotV1
                 return;
             }
             Console.WriteLine("{0} successfully logged in.", username);
-            /*
-            botInstance.initMasterSize();
-            botInstance.setOverlord("STEAM_0:1:52699854");
-            botInstance.setUsername(username);
-            botInstance.setPassword(password);
-            */
             saveToFile();
         }
 
@@ -200,6 +199,40 @@ namespace trineBotV1
                 if (friend.Relationship == EFriendRelationship.RequestRecipient)
                     steamFriends.AddFriend(friend.SteamID);
             }
+            updateUserPrefs(callback);
+        }
+
+        static void updateUserPrefs(SteamFriends.FriendsListCallback callback) //automatic users cleanup
+        {
+            int steamFriendCount = steamFriends.GetFriendCount();
+            for (int k = 0; k < steamFriendCount; ++k )
+            {
+                SteamID comparisonID = steamFriends.GetFriendByIndex(k);
+                if (!users.Exists(buddy => buddy.steamID == comparisonID))
+                {
+                    users.Add(new userPrefs() { steamID = comparisonID, subscribedToBroadcast = true });
+                }
+            }
+            if (steamFriends.GetFriendCount() != users.Count())
+            {
+                bool touched = false;
+                for (int i = 0; i < users.Count; ++i)
+                {
+                    touched = false;
+                    for (int k = 0; k < steamFriendCount; ++k )
+                    {
+                        if (users[i].steamID == steamFriends.GetFriendByIndex(k))
+                        {
+                            touched = true;
+                            break;
+                        }
+                    }
+                    if (!touched)
+                        users.RemoveAt(i);
+                }
+            }
+            string json = JsonConvert.SerializeObject(users, Formatting.None);
+            File.WriteAllText("userPrefs.json", json);
         }
 
         static void onFriendAdded(SteamFriends.FriendAddedCallback callback)
@@ -220,6 +253,7 @@ namespace trineBotV1
                 }
             }
         }
+
         static void parse_input(string input, SteamFriends.FriendMsgCallback callback)
         {
             SteamID partner = callback.Sender;
@@ -230,6 +264,14 @@ namespace trineBotV1
                 if (command[1][0] == '@')
                 {
                     parseBroadcastMessage(input.Remove(0, 11), partner); //remove 11 characters, which is "broadcast @"
+                    return;
+                }
+            }
+            else if (command[0] == "adminbroadcast" && command_len > 1)
+            {
+                if (command[1][0] == '@')
+                {
+                    overlordBroadcastMessage(input.Remove(0, 16), partner); //special broadcast for overlords only
                     return;
                 }
             }
@@ -255,6 +297,9 @@ namespace trineBotV1
                             break;
                         case "nukemaster":
                             OverNukeMaster(partner);
+                            break;
+                        case "togglebroadcast":
+                            toggleBroadcast(partner);
                             break;
                         default:
                             printError(partner, "", -1);
@@ -285,9 +330,28 @@ namespace trineBotV1
             return;
         }
 
+        static void toggleBroadcast(SteamID partner)
+        {
+            bool currentState = false;
+            for (int i = 0; i < users.Count(); ++i)
+            {
+                if (partner == users[i].steamID)
+                {
+                    currentState = !users[i].subscribedToBroadcast;
+                    users[i].subscribedToBroadcast = currentState;
+                    break;
+                }
+            }
+            if (currentState)
+                printLine(partner, "You are now subscribed to broadcast notifications.");
+            else
+                printLine(partner, "You are no longer subscribed to broadcast notifications.");
+            savePrefsToFile();
+        }
+
         static void printAbout(SteamID partner)
         {
-            printLine(partner, "\ntrinerOS is currently at version " + version + ".\ntrinerOS was created by trineroks in under 24 hours at HackSC.");
+            printLine(partner, "\ntrinerOS is currently in version " + version + ".\ntrinerOS was created by trineroks in under 24 hours at HackSC.");
         }
 
         static void amIMaster(SteamID partner)
@@ -308,13 +372,14 @@ namespace trineBotV1
                     break;
             }
         }
+
         static void help(string arg, SteamID partner)
         {
             int checkYourPrivilege = botInstance.hasMasterPrivileges(partner);
             switch(arg)
             {
-                case "command":
-                    printLine(partner, "REGULAR: /help <arg>, /amimaster, /about, /yorick, /whoami");
+                case "commands":
+                    printLine(partner, "REGULAR: /help <arg>, /amimaster, /about, /yorick, /whoami, /togglebroadcast");
                     if (checkYourPrivilege >= 0)
                     {
                         printLine(partner, "MASTER: /broadcast @message");
@@ -323,6 +388,33 @@ namespace trineBotV1
                     {
                         printLine(partner, "OVERLORD: /addmaster <arg>, /removemaster <arg>, /nukemaster");
                     }
+                    break;
+                case "amimaster":
+                    printLine(partner, "amimaster (1) - Check if you have master privilege over this bot. \nUsage: /amimaster");
+                    break;
+                case "about":
+                    printLine(partner, "about (1) - Check the current version of this bot as well as other information. \nUsage: /about");
+                    break;
+                case "yorick":
+                    printLine(partner, "yorick (1) - What a shame he had to pass away. Usage: /yorick");
+                    break;
+                case "whoami":
+                    printLine(partner, "whoami (1) - View your current username and, more importantly, your SteamID. \nUsage: /whoami");
+                    break;
+                case "nukemaster":
+                    printLine(partner, "nukemaster (1) - Clear the entire master list from this bot. \nUsage: /nukemaster");
+                    break;
+                case "togglebroadcast":
+                    printLine(partner, "togglebroadcast (1) - Opt in/opt out of other users' broadcasts. \nUsage: /togglebroadcast");
+                    break;
+                case "addmaster":
+                    printLine(partner, "addmaster (1) - Add a new master to this bot. \nUsage: /addmaster <SteamID>");
+                    break;
+                case "removemaster":
+                    printLine(partner, "removemaster (1) - Remove a master from this bot. \nUsage: /removemaster <SteamID>");
+                    break;
+                case "broadcast":
+                    printLine(partner, "broadcast (1) - Broadcast a message to all users subscribed to this bot. \nUsage: /broadcast @<Message>");
                     break;
                 default:
                     printError(partner, "help", -1);
@@ -403,12 +495,32 @@ namespace trineBotV1
                 switch(command)
                 {
                     case "help":
-                        printLine(recipient, "Use \"/help command\" for a list of commands, or \"/help <command>\" for help on a particular command.");
+                        printLine(recipient, "Use \"/help commands\" for a list of commands, or \"/help <command>\" for help on a particular command.");
                         break;
                     default:
-                        printLine(recipient, "Invalid command entered. Be wary of multiple spaces and/or typos.");
+                        printLine(recipient, "Invalid command entered. Be wary of multiple spaces and/or typos. Try \"/help\".");
                         break;
                 }
+        }
+
+        static bool overlordBroadcastMessage(string message, SteamID sender)
+        {
+            if (botInstance.hasMasterPrivileges(sender) == 1)
+            {
+                int friendCount = steamFriends.GetFriendCount();
+                string senderName = steamFriends.GetFriendPersonaName(sender);
+                SteamID recipient;
+                if (friendCount == 0)
+                    return false;
+                for (int i = 0; i < users.Count(); ++i)
+                {
+                    recipient = users[i].steamID;
+                    printLine(recipient, "Admin " + senderName + " broadcasts - " + message);
+                }
+                return true;
+            }
+            printError(sender, "", 1);
+            return false;
         }
 
         static bool parseBroadcastMessage(string message, SteamID sender) //this is a master level command
@@ -418,12 +530,17 @@ namespace trineBotV1
                 int friendCount = steamFriends.GetFriendCount();
                 string senderName = steamFriends.GetFriendPersonaName(sender);
                 SteamID recipient;
+                userPrefs receiver;
                 if (friendCount == 0)
                     return false;
-                for (int i = 0; i < friendCount; ++i)
+                for (int i = 0; i < users.Count(); ++i)
                 {
-                    recipient = steamFriends.GetFriendByIndex(i);
-                    printLine(recipient, senderName + " broadcasts - " + message);
+                    receiver = users[i];
+                    if (receiver.subscribedToBroadcast)
+                    {
+                        recipient = receiver.steamID;
+                        printLine(recipient, senderName + " broadcasts - " + message);
+                    }
                 }
                 return true;
             }
@@ -435,6 +552,12 @@ namespace trineBotV1
         {
             string json = JsonConvert.SerializeObject(botInstance, Formatting.Indented);
             File.WriteAllText("configs.json", json);
+        }
+
+        static void savePrefsToFile()
+        {
+            string json = JsonConvert.SerializeObject(users, Formatting.None);
+            File.WriteAllText("userPrefs.json", json);
         }
     }
 }
